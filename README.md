@@ -12,6 +12,70 @@ sudo chmod u+x {simulator_file_name}
 ### Goals
 In this project your goal is to safely navigate around a virtual highway with other traffic that is driving +-10 MPH of the 50 MPH speed limit. You will be provided the car's localization and sensor fusion data, there is also a sparse map list of waypoints around the highway. The car should try to go as close as possible to the 50 MPH speed limit, which means passing slower traffic when possible, note that other cars will try to change lanes too. The car should avoid hitting other cars at all cost as well as driving inside of the marked road lanes at all times, unless going from one lane to another. The car should be able to make one complete loop around the 6946m highway. Since the car is trying to go 50 MPH, it should take a little over 5 minutes to complete 1 loop. Also the car should not experience total acceleration over 10 m/s^2 and jerk that is greater than 10 m/s^3.
 
+---
+
+[//]: # (Image References)
+[image1]: ./output_images/highwaydriving.JPG "PathPlanning"
+
+![alt text][image1]
+
+---
+
+## Project Rubric Criteria
+
+#### 1. The car is able to drive at least 4.32 miles without incident.
+
+  The pic above show the vehicle can drive at least 4.32 miles without incident.
+
+#### 2. The car drives according to the speed limit.
+
+  In line 59 of `main.cpp` I define `target_velocity = 49.5 m/s`. This will be the maximum allowed velocity for the vehicle and will take care of fulfilling this criteria. The logic behind the state machine will take care of encouraging the vehicle to drive as fast as possible without breaking the speed limit or colliding with other vehicles.
+
+#### 3. Max Acceleration and Jerk are not Exceeded.
+
+  I take care of constraining acceleration and jerk in lines 121 - 125 from `main.cpp`. Regardless of the velocity suggested by the planner, I will only increase/decrease the vehicle's velocity (`ref_vel`) by small steps:
+  ```cpp
+  if(suggested_velocity > ref_vel && ref_vel < target_velocity){
+    ref_vel += 0.224;       // Equivalent to 5 m/s^2
+  }
+  else if(suggested_velocity < ref_vel){
+    ref_vel -= 0.224;
+  }
+  ```
+
+#### 4. Car does not have collisions.
+
+  Collisions are avoided by carefully analyzing the `sensor_fusion` information. The car have prepare for lane change state and
+during that state other vehicles' info will be analyzed for `sensor_fusion`. A lane change is only allowed if there are no vehicles within certain range in the intended lane. Similarly, when keeping a lane our velocity is limited by the velocity of the vehicle directly ahead of us.
+
+#### 5. The car stays in its lane, except for the time between changing lanes.
+
+  I based a lot of my code on the suggestions presented on the project walkthrough where the trajectory of our vehicle is computed using the `spline.h` library. Lines 170-172 in `main.cpp` add three 30m spaced points ahead of our location using Frenet space. The distance _d_ of each one of these points is computed considering the _lane_ intended by our path planner. By doing this, I can just use our current spline to interpolate our trajectory points in lanes 211-230 (`main.cpp`).
+
+  Whenever our planner outputs a lane change, the provided code will take care of generating a trajectory which will take us to that lane.
+
+#### 6. The car is able to change lanes.
+
+  As described above, the car will be able to change lanes whenever our path planner suggests so. The path planner will output the intended lane (lanes 115-116 `main.cpp`) and the trajectory generation will take care of taking us there. The logic behind the path planner is described below.
+
+#### 7. How to generate paths.
+
+  The path planner logic is defined in the function `choose_next_state()` of  `Vehicle` class and can be briefly summarized as follows:
+
+  - I obtain the possible successor states given our state machine logic by calling the function `successor_states()` (lines 111-134 in _vehicle.cpp_)
+
+  - For each of these possible states, we obtain a set of trajectories (intended lane and expected velocity) by calling the function `generate_trajectory()` (136-149 in `vehicle.cpp`)
+
+  - `generate_trajectory()` will take care of verifying the feasibility and safety of each state and will only allow a lane change if it is safe to do it.
+
+  - We will compute a cost value for each one of the possible states (line 58 in `vehicle.cpp`) by calling the function `calculate_cost()` (85-108 in `vehicle.cpp`).
+
+  - `calculate_cost()` will assign a lower cost to those states with result in an overall higher velocity by analyzing both the expected velocity in our current lane and the expected velocity in the intended lane. If a lane change is required, the cost function will assign a lower cost to that lane which will give us more empty room to move around (line 98 in `vehicle.cpp`).
+
+  - The trajectory (intended lane and expected velocity) of the best state (minimum cost) are then returned to `main.cpp` where the rest of our code will take care of adjusting a proper trajectory for the simulator to execute.
+
+---
+
 #### The map of the highway is in data/highway_map.txt
 Each waypoint in the list contains  [x,y,s,dx,dy] values. x and y are the waypoint's map coordinate position, the s value is the distance along the road to get to that waypoint in meters, the dx and dy values define the unit normal vector pointing outward of the highway loop.
 
